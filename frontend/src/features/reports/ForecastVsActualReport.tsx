@@ -1,0 +1,327 @@
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Download, GitCompare, ListOrdered } from 'lucide-react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { reportsApi } from '@/lib/api/reports'
+import { formatCurrency } from '@/lib/currency'
+import { downloadCsv } from '@/lib/csv'
+import { DateRangeFilter } from './DateRangeFilter'
+import {
+  formatBucketLabel,
+  startOfMonthOffset,
+  todayISO,
+  type SupportedCurrency,
+} from './shared'
+
+type Props = {
+  currency: SupportedCurrency
+}
+
+export function ForecastVsActualReport({ currency }: Props) {
+  const [from, setFrom] = useState<string>(() => startOfMonthOffset(2))
+  const [to, setTo] = useState<string>(() => todayISO())
+
+  const query = useQuery({
+    queryKey: ['reports', 'forecast-vs-actual', { currency, from, to }],
+    queryFn: () => reportsApi.forecastVsActual({ currency, from, to }),
+    enabled: Boolean(from && to),
+  })
+
+  const data = query.data
+  const items = data?.items ?? []
+
+  const chartData = useMemo(
+    () =>
+      items.map((it) => ({
+        period: formatBucketLabel(it.period, 'month'),
+        forecast_in: parseFloat(it.forecast_in),
+        actual_in: parseFloat(it.actual_in),
+        forecast_out: parseFloat(it.forecast_out),
+        actual_out: parseFloat(it.actual_out),
+      })),
+    [items]
+  )
+
+  function handleExport() {
+    if (!data) return
+    const rows = items.map((it) => ({
+      periodo: it.period,
+      previsto_entrada: it.forecast_in,
+      realizado_entrada: it.actual_in,
+      previsto_saida: it.forecast_out,
+      realizado_saida: it.actual_out,
+    }))
+    downloadCsv(
+      rows,
+      [
+        'periodo',
+        'previsto_entrada',
+        'realizado_entrada',
+        'previsto_saida',
+        'realizado_saida',
+      ],
+      `previsto-vs-realizado_${currency}_${from}_${to}.csv`
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-soft">
+        <DateRangeFilter
+          from={from}
+          to={to}
+          onFromChange={setFrom}
+          onToChange={setTo}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="ml-auto h-9"
+          onClick={handleExport}
+          disabled={!data || items.length === 0}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Exportar CSV
+        </Button>
+      </div>
+
+      <div className="rounded-xl border border-border/60 bg-card shadow-soft">
+        <div className="flex items-center justify-between border-b border-border/40 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              <GitCompare className="h-3 w-3 text-primary" strokeWidth={2.25} />
+              <span>Forecast vs Actual</span>
+            </div>
+            <h3 className="mt-1 text-[15px] font-semibold tracking-tight">
+              Previsto vs Realizado · {currency}
+            </h3>
+          </div>
+          <div className="hidden flex-wrap items-center gap-3 text-[11px] sm:flex">
+            <LegendDot color="var(--color-success)" opacity={0.6} label="Previsto +" />
+            <LegendDot color="var(--color-success)" label="Realizado +" />
+            <LegendDot color="var(--color-destructive)" opacity={0.6} label="Previsto −" />
+            <LegendDot color="var(--color-destructive)" label="Realizado −" />
+          </div>
+        </div>
+        <div className="p-3 sm:p-5">
+          {query.isLoading ? (
+            <div className="h-[340px] w-full animate-pulse rounded-lg bg-muted/60" />
+          ) : query.isError ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              Falha ao carregar relatório.
+            </div>
+          ) : items.length === 0 ? (
+            <EmptyState msg="Sem dados para o período selecionado." />
+          ) : (
+            <div className="h-[340px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                  barCategoryGap="22%"
+                >
+                  <CartesianGrid
+                    strokeDasharray="2 4"
+                    vertical={false}
+                    stroke="var(--color-border)"
+                    strokeOpacity={0.6}
+                  />
+                  <XAxis
+                    dataKey="period"
+                    tick={{
+                      fontSize: 11,
+                      fill: 'var(--color-muted-foreground)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    tick={{
+                      fontSize: 10,
+                      fill: 'var(--color-muted-foreground)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) =>
+                      new Intl.NumberFormat('pt-BR', {
+                        notation: 'compact',
+                        maximumFractionDigits: 1,
+                      }).format(v)
+                    }
+                    width={56}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'var(--color-accent)', opacity: 0.4 }}
+                    contentStyle={{
+                      backgroundColor: 'var(--color-popover)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      fontSize: 12,
+                      fontFamily: 'var(--font-mono)',
+                      boxShadow: 'var(--shadow-pop)',
+                    }}
+                    labelStyle={{
+                      color: 'var(--color-foreground)',
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                    formatter={(v) =>
+                      typeof v === 'number' || typeof v === 'string'
+                        ? formatCurrency(v, currency)
+                        : ''
+                    }
+                  />
+                  <Bar
+                    dataKey="forecast_in"
+                    name="Previsto entrada"
+                    fill="var(--color-success)"
+                    fillOpacity={0.55}
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={28}
+                  />
+                  <Bar
+                    dataKey="actual_in"
+                    name="Realizado entrada"
+                    fill="var(--color-success)"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={28}
+                  />
+                  <Bar
+                    dataKey="forecast_out"
+                    name="Previsto saída"
+                    fill="var(--color-destructive)"
+                    fillOpacity={0.55}
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={28}
+                  />
+                  <Bar
+                    dataKey="actual_out"
+                    name="Realizado saída"
+                    fill="var(--color-destructive)"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={28}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-soft">
+        <div className="flex items-start justify-between border-b border-border/40 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              <ListOrdered className="h-3 w-3 text-primary" strokeWidth={2.25} />
+              <span>Detalhamento</span>
+            </div>
+            <h3 className="mt-1 text-[15px] font-semibold tracking-tight">
+              Por período
+            </h3>
+          </div>
+        </div>
+        <Table>
+          <TableHeader className="bg-muted/40">
+            <TableRow className="border-b border-border/60 hover:bg-transparent">
+              <TableHead className="px-4 py-3 font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Período
+              </TableHead>
+              <TableHead className="px-4 py-3 text-right font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Previsto entrada
+              </TableHead>
+              <TableHead className="px-4 py-3 text-right font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Realizado entrada
+              </TableHead>
+              <TableHead className="px-4 py-3 text-right font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Previsto saída
+              </TableHead>
+              <TableHead className="px-4 py-3 text-right font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Realizado saída
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                  {query.isLoading ? 'Carregando...' : 'Sem registros.'}
+                </TableCell>
+              </TableRow>
+            ) : (
+              items.map((it) => (
+                <TableRow
+                  key={it.period}
+                  className="border-b border-border/40 transition-colors hover:bg-accent/30"
+                >
+                  <TableCell className="px-4 py-3 font-mono text-sm tabular-nums">
+                    {formatBucketLabel(it.period, 'month')}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right font-mono text-sm tabular-nums text-muted-foreground">
+                    {formatCurrency(it.forecast_in, currency)}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right font-mono text-sm tabular-nums text-success">
+                    {formatCurrency(it.actual_in, currency)}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right font-mono text-sm tabular-nums text-muted-foreground">
+                    {formatCurrency(it.forecast_out, currency)}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right font-mono text-sm tabular-nums text-destructive">
+                    {formatCurrency(it.actual_out, currency)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+}
+
+function LegendDot({
+  color,
+  label,
+  opacity = 1,
+}: {
+  color: string
+  label: string
+  opacity?: number
+}) {
+  return (
+    <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <span
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: color, opacity, boxShadow: `0 0 8px ${color}` }}
+        aria-hidden="true"
+      />
+      {label}
+    </div>
+  )
+}
+
+function EmptyState({ msg }: { msg: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/30 px-6 py-16 text-center text-sm text-muted-foreground">
+      {msg}
+    </div>
+  )
+}
