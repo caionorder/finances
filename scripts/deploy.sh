@@ -76,7 +76,7 @@ run_remote() {
         step "[dry-run] ssh ${DEPLOY_USER}@${DEPLOY_HOST} '$cmd'"
     else
         step "ssh ${DEPLOY_USER}@${DEPLOY_HOST} <<< $cmd"
-        ssh -o ConnectTimeout=15 -o ServerAliveInterval=5 \
+        ssh -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
             "${DEPLOY_USER}@${DEPLOY_HOST}" "$cmd"
     fi
 }
