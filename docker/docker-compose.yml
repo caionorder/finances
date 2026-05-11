@@ -104,8 +104,11 @@ services:
         condition: service_healthy
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
     ports:
       - "${NGINX_PORT}:80"
+      - "443:443"
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:80/api/health || exit 1"]
       interval: 30s
