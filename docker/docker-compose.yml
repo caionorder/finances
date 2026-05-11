@@ -50,6 +50,7 @@ services:
       UPLOAD_DIR: ${UPLOAD_DIR}
       API_KEY_HEADER: ${API_KEY_HEADER}
       UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:5173","http://localhost"]}
       TZ: ${TZ}
     volumes:
       - ../data/uploads:/data/uploads
