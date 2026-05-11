@@ -2,7 +2,7 @@
 
 COMPOSE := docker compose -f docker/docker-compose.yml --env-file .env
 
-.PHONY: help up down logs ps shell-api shell-db build rebuild restart clean migrate health backup-db restore-db
+.PHONY: help up down logs ps shell-api shell-db build rebuild restart clean migrate health backup-db restore-db deploy deploy-dry deploy-no-build
 
 help: ## Lista os targets disponiveis
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -56,3 +56,12 @@ clean: ## ATENCAO: derruba e APAGA o volume do MySQL (perda de dados!)
 	@echo "AVISO: isso vai apagar o volume mysql_data e todos os dados do banco."
 	@read -p "Continuar? [y/N] " ans && [ "$$ans" = "y" ] || exit 1
 	$(COMPOSE) down -v
+
+deploy: ## Deploy prod: push + remote pull + build + up + health (use ARGS="--restart" etc)
+	./scripts/deploy.sh $(ARGS)
+
+deploy-dry: ## Dry-run do deploy (so imprime, nao executa)
+	./scripts/deploy.sh --dry-run
+
+deploy-no-build: ## Deploy sem rebuild de imagem (so git pull + up)
+	./scripts/deploy.sh --no-build
