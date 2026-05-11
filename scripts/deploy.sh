@@ -28,7 +28,8 @@ DEPLOY_HOST="${DEPLOY_HOST:-64.23.131.102}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/finances}"
 HEALTH_URL="${HEALTH_URL:-https://fin.norder.dev/api/health}"
-HEALTH_TIMEOUT_S="${HEALTH_TIMEOUT_S:-60}"
+HEALTH_TIMEOUT_S="${HEALTH_TIMEOUT_S:-120}"
+HEALTH_REQ_TIMEOUT_S="${HEALTH_REQ_TIMEOUT_S:-10}"
 
 DO_BUILD=1
 FORCE_RECREATE=0
@@ -140,23 +141,25 @@ if [ "$DRY_RUN" -eq 1 ]; then
     exit 0
 fi
 
-step "healthcheck: GET $HEALTH_URL (timeout ${HEALTH_TIMEOUT_S}s)"
+step "healthcheck: GET $HEALTH_URL (deadline ${HEALTH_TIMEOUT_S}s, req-timeout ${HEALTH_REQ_TIMEOUT_S}s)"
 deadline=$(( $(date +%s) + HEALTH_TIMEOUT_S ))
 body=""
-status=0
+attempts=0
+ok_seen=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
-    body=$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)
+    attempts=$((attempts + 1))
+    body=$(curl -fsS --max-time "$HEALTH_REQ_TIMEOUT_S" "$HEALTH_URL" 2>/dev/null || true)
     if printf '%s' "$body" | grep -q '"status":"ok"'; then
-        status=1
+        ok_seen=1
         break
     fi
     sleep 2
 done
 
-if [ "$status" -eq 1 ]; then
-    ok "health=$body"
+if [ "$ok_seen" -eq 1 ]; then
+    ok "health=$body (apos $attempts tentativa(s))"
     exit 0
 else
-    err "healthcheck nao retornou status=ok em ${HEALTH_TIMEOUT_S}s; ultimo body: $body"
+    err "healthcheck nao retornou status=ok em ${HEALTH_TIMEOUT_S}s ($attempts tentativas); ultimo body: $body"
     exit 1
 fi
