@@ -32,6 +32,7 @@ import {
   YAxis,
 } from 'recharts'
 import { useAuth } from '@/features/auth/AuthContext'
+import { FinancialHealthCard } from '@/features/dashboard/FinancialHealthCard'
 import { UpcomingPayablesWidget } from '@/features/dashboard/UpcomingPayablesWidget'
 import { CurrencySelector } from '@/features/reports/CurrencySelector'
 import {
@@ -191,6 +192,12 @@ export default function Home() {
   const currencyExposureQ = useQuery({
     queryKey: ['dashboard', 'currency-exposure', { convert_to: CONVERT_TO }],
     queryFn: () => reportsApi.currencyExposure({ convert_to: CONVERT_TO }),
+    staleTime: 5 * 60_000,
+  })
+
+  const financialHealthQ = useQuery({
+    queryKey: ['dashboard', 'financial-health', { convert_to: CONVERT_TO }],
+    queryFn: () => reportsApi.financialHealth({ convert_to: CONVERT_TO }),
     staleTime: 5 * 60_000,
   })
 
@@ -377,6 +384,16 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Saúde financeira — bloco hero agregado (sempre USD) */}
+      <div className="relative">
+        <FinancialHealthCard
+          loading={financialHealthQ.isLoading}
+          isError={financialHealthQ.isError}
+          data={financialHealthQ.data}
+          onRetry={() => financialHealthQ.refetch()}
+        />
+      </div>
 
       {/* KPIs principais */}
       <div className="relative grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

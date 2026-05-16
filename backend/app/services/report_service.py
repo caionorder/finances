@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 from sqlalchemy import case, func, or_, select
@@ -17,7 +18,9 @@ from app.models import (
     CreditCardAcl,
     CreditCardCycle,
     CreditCardPurchase,
+    Investment,
     Payable,
+    PayablePayment,
     Receivable,
     Transaction,
     User,
@@ -35,6 +38,7 @@ from app.schemas.report import (
     CreditCardBalance,
     CurrencyExposureItem,
     CurrencyExposureReport,
+    FinancialHealthReport,
     ForecastActualItem,
     ForecastVsActualReport,
     MonthExpense,
@@ -49,6 +53,8 @@ from app.schemas.report import (
     TopCategoriesReport,
     TopCategoryItem,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _visible_account_ids(db: Session, user: User) -> list[int] | None:
@@ -1151,6 +1157,202 @@ def net_worth_trend(
     )
 
 
+# ---------------------------------------------------------------------------
+# Financial health — Home card aggregator
+# ---------------------------------------------------------------------------
+
+
+def _convert_or_warn(
+    db: Session, amount: Decimal, from_code: str, to_code: str
+) -> Decimal:
+    """Best-effort convert. Returns Decimal('0') if no rate; logs warning."""
+    if amount == 0:
+        return Decimal("0")
+    from app.services import fx_service
+
+    rate = fx_service.get_latest_rate(db, from_code, to_code)
+    if rate is None:
+        logger.warning(
+            "financial_health: no fx rate for %s->%s, skipping amount=%s",
+            from_code,
+            to_code,
+            amount,
+        )
+        return Decimal("0")
+    return amount * rate
+
+
+def financial_health(
+    db: Session,
+    user: User,
+    as_of: date | None = None,
+    convert_to: str = "USD",
+) -> FinancialHealthReport:
+    """Aggregated snapshot for the Home "Financial Health" card.
+
+    All monetary outputs are converted to ``convert_to`` (default USD).
+    Sources lacking an FX rate to the target are dropped from the running
+    sum (warning logged) rather than failing the whole request.
+    """
+    from app.services import investment_service
+
+    today = as_of or date.today()
+    convert_to_code = convert_to.upper()
+    month_start = _month_start(today)
+    month_end = _end_of_month(today)
+
+    visible = _visible_account_ids(db, user)
+    no_accounts_visible = visible is not None and not visible
+
+    incoming = Decimal("0")
+    outgoing = Decimal("0")
+    pending = Decimal("0")
+
+    if not no_accounts_visible:
+        # incoming (a): realized income transactions in month, per currency
+        in_tx_stmt = (
+            select(
+                Transaction.currency_code,
+                func.coalesce(func.sum(Transaction.amount), 0).label("total"),
+            )
+            .where(
+                Transaction.date >= month_start,
+                Transaction.date <= month_end,
+                Transaction.kind == TransactionKind.income,
+                Transaction.amount > 0,
+            )
+            .group_by(Transaction.currency_code)
+        )
+        if visible is not None:
+            in_tx_stmt = in_tx_stmt.where(Transaction.account_id.in_(visible))
+        for row in db.execute(in_tx_stmt).all():
+            incoming += _convert_or_warn(
+                db, Decimal(row.total or 0), row.currency_code, convert_to_code
+            )
+
+        # incoming (b): receivables received this month that did NOT spawn a
+        # transaction (e.g. no linked account). Avoids double counting since
+        # transaction-linked receivables are already covered by branch (a).
+        rec_stmt = (
+            select(
+                Receivable.currency_code,
+                func.coalesce(func.sum(Receivable.amount), 0).label("total"),
+            )
+            .where(
+                Receivable.received_at >= month_start,
+                Receivable.received_at <= month_end,
+                Receivable.transaction_id.is_(None),
+            )
+            .group_by(Receivable.currency_code)
+        )
+        rec_pred = _receivable_visibility_predicate(user, visible)
+        if rec_pred is not None:
+            rec_stmt = rec_stmt.where(rec_pred)
+        for row in db.execute(rec_stmt).all():
+            incoming += _convert_or_warn(
+                db, Decimal(row.total or 0), row.currency_code, convert_to_code
+            )
+
+        # outgoing (a): realized expense transactions in month, per currency
+        out_tx_stmt = (
+            select(
+                Transaction.currency_code,
+                func.coalesce(func.sum(-Transaction.amount), 0).label("total"),
+            )
+            .where(
+                Transaction.date >= month_start,
+                Transaction.date <= month_end,
+                Transaction.kind == TransactionKind.expense,
+                Transaction.amount < 0,
+            )
+            .group_by(Transaction.currency_code)
+        )
+        if visible is not None:
+            out_tx_stmt = out_tx_stmt.where(Transaction.account_id.in_(visible))
+        for row in db.execute(out_tx_stmt).all():
+            outgoing += _convert_or_warn(
+                db, Decimal(row.total or 0), row.currency_code, convert_to_code
+            )
+
+        # outgoing (b): payable_payments paid this month that did NOT spawn a
+        # transaction. Currency comes from the parent Payable.
+        pp_stmt = (
+            select(
+                Payable.currency_code,
+                func.coalesce(func.sum(PayablePayment.amount), 0).label("total"),
+            )
+            .join(Payable, Payable.id == PayablePayment.payable_id)
+            .where(
+                PayablePayment.paid_at >= month_start,
+                PayablePayment.paid_at <= month_end,
+                PayablePayment.transaction_id.is_(None),
+            )
+            .group_by(Payable.currency_code)
+        )
+        pp_pred = _payable_visibility_predicate(user, visible)
+        if pp_pred is not None:
+            pp_stmt = pp_stmt.where(pp_pred)
+        for row in db.execute(pp_stmt).all():
+            outgoing += _convert_or_warn(
+                db, Decimal(row.total or 0), row.currency_code, convert_to_code
+            )
+
+        # pending payables: due in month, not fully paid — sum remaining
+        pending_stmt = (
+            select(
+                Payable.currency_code,
+                func.coalesce(
+                    func.sum(Payable.amount - Payable.paid_amount), 0
+                ).label("total"),
+            )
+            .where(
+                Payable.due_date >= month_start,
+                Payable.due_date <= month_end,
+                Payable.paid_amount < Payable.amount,
+            )
+            .group_by(Payable.currency_code)
+        )
+        pending_pred = _payable_visibility_predicate(user, visible)
+        if pending_pred is not None:
+            pending_stmt = pending_stmt.where(pending_pred)
+        for row in db.execute(pending_stmt).all():
+            pending += _convert_or_warn(
+                db, Decimal(row.total or 0), row.currency_code, convert_to_code
+            )
+
+    # Investments: sum current_value across positions (non-admins see only own)
+    inv_stmt = select(Investment).where(Investment.is_archived.is_(False))
+    if user.role != UserRole.admin:
+        inv_stmt = inv_stmt.where(Investment.created_by_user_id == user.id)
+    investments = list(db.execute(inv_stmt).scalars().all())
+
+    total_investments = Decimal("0")
+    for inv in investments:
+        pos = investment_service.compute_position(db, inv, today)
+        current_value = Decimal(pos["current_value"])
+        total_investments += _convert_or_warn(
+            db, current_value, inv.currency_code, convert_to_code
+        )
+
+    # Net worth (accounts - credit_cards) already converted by net_worth()
+    nw = net_worth(db, user, today, include_archived=False, convert_to=convert_to_code)
+    nw_converted = nw.total_converted or Decimal("0")
+    total_health = nw_converted + total_investments
+
+    q = Decimal("0.01")
+    return FinancialHealthReport(
+        as_of=today,
+        month_start=month_start,
+        month_end=month_end,
+        convert_to=convert_to_code,
+        incoming_month=incoming.quantize(q, rounding=ROUND_HALF_UP),
+        outgoing_month=outgoing.quantize(q, rounding=ROUND_HALF_UP),
+        pending_payables_month=pending.quantize(q, rounding=ROUND_HALF_UP),
+        total_investments=total_investments.quantize(q, rounding=ROUND_HALF_UP),
+        total_health=total_health.quantize(q, rounding=ROUND_HALF_UP),
+    )
+
+
 __all__ = [
     "cashflow",
     "by_category",
@@ -1164,4 +1366,5 @@ __all__ = [
     "currency_exposure",
     "top_categories",
     "net_worth_trend",
+    "financial_health",
 ]

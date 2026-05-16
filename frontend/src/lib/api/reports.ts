@@ -213,6 +213,20 @@ export type NetWorthTrendReport = {
   items: NetWorthTrendItem[]
 }
 
+// ---- Financial health ---------------------------------------------------
+
+export type FinancialHealthReport = {
+  as_of: string
+  month_start: string
+  month_end: string
+  convert_to: string
+  incoming_month: string
+  outgoing_month: string
+  pending_payables_month: string
+  total_investments: string
+  total_health: string
+}
+
 export const reportsApi = {
   cashflow: async (params: {
     currency: string
@@ -329,6 +343,15 @@ export const reportsApi = {
     convert_to: string
   }): Promise<NetWorthTrendReport> => {
     const { data } = await api.get<NetWorthTrendReport>('/reports/net-worth-trend', {
+      params,
+    })
+    return data
+  },
+  financialHealth: async (params?: {
+    as_of?: string
+    convert_to?: string
+  }): Promise<FinancialHealthReport> => {
+    const { data } = await api.get<FinancialHealthReport>('/reports/financial-health', {
       params,
     })
     return data

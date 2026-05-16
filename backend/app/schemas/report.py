@@ -201,3 +201,15 @@ class NetWorthTrendReport(BaseModel):
     from_date: date
     to_date: date
     items: list[NetWorthTrendItem]
+
+
+class FinancialHealthReport(BaseModel):
+    as_of: date
+    month_start: date
+    month_end: date
+    convert_to: str
+    incoming_month: Decimal
+    outgoing_month: Decimal
+    pending_payables_month: Decimal
+    total_investments: Decimal
+    total_health: Decimal

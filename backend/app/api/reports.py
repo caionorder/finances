@@ -12,6 +12,7 @@ from app.schemas.report import (
     ByCategoryReport,
     CashflowReport,
     CurrencyExposureReport,
+    FinancialHealthReport,
     ForecastVsActualReport,
     NetWorthReport,
     NetWorthTrendReport,
@@ -159,3 +160,13 @@ def net_worth_trend(
     convert_to: str = Query("USD", min_length=3, max_length=10),
 ) -> NetWorthTrendReport:
     return report_service.net_worth_trend(db, user, from_date, to_date, convert_to)
+
+
+@router.get("/financial-health", response_model=FinancialHealthReport)
+def financial_health(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    as_of: date | None = None,
+    convert_to: str = Query("USD", min_length=3, max_length=10),
+) -> FinancialHealthReport:
+    return report_service.financial_health(db, user, as_of, convert_to)
