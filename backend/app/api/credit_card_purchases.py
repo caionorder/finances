@@ -70,6 +70,45 @@ def _check_card_perm(
         404: {"description": "Credit card not found."},
         422: {"description": "Validation error (amount <= 0, installments > 72, unknown category, ...)."},
     },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "shell",
+                "label": "curl",
+                "source": (
+                    "curl -X POST https://api.example.com/api/credit-cards/1/purchases \\\n"
+                    "  -H 'Authorization: Bearer $ACCESS_TOKEN' \\\n"
+                    "  -H 'Content-Type: application/json' \\\n"
+                    "  -d '{\n"
+                    "        \"merchant\": \"Amazon\",\n"
+                    "        \"amount\": \"599.90\",\n"
+                    "        \"purchase_date\": \"2026-05-25\",\n"
+                    "        \"installments\": 3\n"
+                    "      }'"
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "httpx",
+                "source": (
+                    "import httpx\n\n"
+                    "card_id = 1\n"
+                    "r = httpx.post(\n"
+                    "    f'https://api.example.com/api/credit-cards/{card_id}/purchases',\n"
+                    "    headers={'Authorization': f'Bearer {access_token}'},\n"
+                    "    json={\n"
+                    "        'merchant': 'Amazon',\n"
+                    "        'amount': '599.90',\n"
+                    "        'purchase_date': '2026-05-25',\n"
+                    "        'installments': 3,\n"
+                    "    },\n"
+                    ")\n"
+                    "r.raise_for_status()\n"
+                    "print(r.json())"
+                ),
+            },
+        ],
+    },
 )
 def create_purchase(
     payload: PurchaseCreate,

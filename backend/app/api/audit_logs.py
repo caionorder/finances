@@ -35,17 +35,53 @@ def _decode_cursor(cursor: str) -> int:
     "",
     response_model=CursorPage[AuditLogOut],
     dependencies=[Depends(require_admin)],
+    summary="List sensitive-operation audit records (admin only)",
+    description=(
+        "Returns audit trail entries for sensitive actions across the system — user creation, "
+        "ACL changes, API-key issuance, manual transaction edits, password resets, etc. "
+        "Results are ordered by descending `id` (newest first) and paginated via cursor.\n\n"
+        "Every filter is optional; combine them to narrow down to a specific entity, actor or "
+        "time window.\n\n"
+        "**This endpoint is strictly read-only** — audit records are immutable.\n\n"
+        "**Authorization**: caller must have `role == admin`."
+    ),
+    responses={
+        401: {"description": "Missing or invalid access token."},
+        403: {"description": "Caller is not an admin."},
+        400: {"description": "Invalid pagination cursor."},
+    },
 )
 def list_audit_logs(
     db: Annotated[Session, Depends(get_db)],
-    entity: str | None = None,
-    entity_id: int | None = None,
-    user_id: int | None = None,
-    action: str | None = None,
-    from_date: date | None = None,
-    to_date: date | None = None,
-    cursor: str | None = None,
-    limit: int = Query(100, ge=1, le=500),
+    entity: str | None = Query(
+        None,
+        description="Restrict to a single entity type (e.g. `user`, `account`, `transaction`).",
+    ),
+    entity_id: int | None = Query(
+        None,
+        description="Restrict to a specific entity instance id.",
+    ),
+    user_id: int | None = Query(
+        None,
+        description="Restrict to actions performed by a specific actor user.",
+    ),
+    action: str | None = Query(
+        None,
+        description="Restrict to a specific verb (e.g. `create`, `update`, `delete`, `revoke`).",
+    ),
+    from_date: date | None = Query(
+        None,
+        description="Inclusive lower bound on log creation date (ISO YYYY-MM-DD).",
+    ),
+    to_date: date | None = Query(
+        None,
+        description="Inclusive upper bound on log creation date (ISO YYYY-MM-DD).",
+    ),
+    cursor: str | None = Query(
+        None,
+        description="Opaque cursor returned by the previous page's `next_cursor`.",
+    ),
+    limit: int = Query(100, ge=1, le=500, description="Max items per page (1-500)."),
 ) -> CursorPage[AuditLogOut]:
     stmt = select(AuditLog, User.email.label("user_email")).outerjoin(
         User, User.id == AuditLog.user_id

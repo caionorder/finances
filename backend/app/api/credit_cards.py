@@ -44,6 +44,32 @@ require_admin = require_role(UserRole.admin)
     responses={
         401: {"description": "Missing or invalid JWT bearer token."},
     },
+    openapi_extra={
+        "x-codeSamples": [
+            {
+                "lang": "shell",
+                "label": "curl",
+                "source": (
+                    "curl https://api.example.com/api/credit-cards \\\n"
+                    "  -H 'Authorization: Bearer $ACCESS_TOKEN'"
+                ),
+            },
+            {
+                "lang": "python",
+                "label": "httpx",
+                "source": (
+                    "import httpx\n\n"
+                    "r = httpx.get(\n"
+                    "    'https://api.example.com/api/credit-cards',\n"
+                    "    headers={'Authorization': f'Bearer {access_token}'},\n"
+                    ")\n"
+                    "r.raise_for_status()\n"
+                    "for card in r.json():\n"
+                    "    print(card['id'], card['name'], card['currency_code'])"
+                ),
+            },
+        ],
+    },
 )
 def list_credit_cards(
     db: Annotated[Session, Depends(get_db)],

@@ -72,17 +72,51 @@ def _parse_decimal(value: str, field: str) -> Decimal:
         ) from exc
 
 
-@router.get("", response_model=CursorPage[FacturaOut])
+@router.get(
+    "",
+    response_model=CursorPage[FacturaOut],
+    summary="List facturas (Paraguay-style invoices), cursor-paginated",
+    description=(
+        "Lists facturas the caller can see, optionally filtered by type, issue-date range, "
+        "supplier name and a free-text search across number/ruc/supplier_name.\n\n"
+        "A factura represents a fiscal invoice with discriminated IVA buckets (5%, 10%, "
+        "exempt) — the canonical document for Paraguayan tax reporting.\n\n"
+        "**Pagination**: pass the previous response's `next_cursor` back as `?cursor=...`."
+    ),
+    responses={
+        401: {"description": "Missing or invalid access token."},
+    },
+)
 def list_facturas(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
-    type: FacturaType | None = Query(default=None),
-    date_from: _dt.date | None = Query(default=None, alias="from"),
-    date_to: _dt.date | None = Query(default=None, alias="to"),
-    supplier: str | None = None,
-    search: str | None = None,
-    cursor: str | None = None,
-    limit: int = Query(50, ge=1, le=200),
+    type: FacturaType | None = Query(
+        default=None,
+        description="Filter by direction: `received` (suppliers' invoices to us) or `issued` (invoices we emitted).",
+    ),
+    date_from: _dt.date | None = Query(
+        default=None,
+        alias="from",
+        description="Inclusive lower bound on the factura `date` (ISO YYYY-MM-DD).",
+    ),
+    date_to: _dt.date | None = Query(
+        default=None,
+        alias="to",
+        description="Inclusive upper bound on the factura `date` (ISO YYYY-MM-DD).",
+    ),
+    supplier: str | None = Query(
+        None,
+        description="Case-insensitive substring match against `supplier_name`.",
+    ),
+    search: str | None = Query(
+        None,
+        description="Free-text search across number, RUC and supplier name (case-insensitive).",
+    ),
+    cursor: str | None = Query(
+        None,
+        description="Opaque cursor returned by the previous page's `next_cursor`.",
+    ),
+    limit: int = Query(50, ge=1, le=200, description="Max items per page (1-200)."),
 ) -> CursorPage[FacturaOut]:
     return factura_service.list_facturas(
         db,
@@ -104,6 +138,30 @@ def list_facturas(
     response_model=FacturaOut,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_member_or_admin)],
+    summary="Create a factura with an optional PDF/image attachment",
+    description=(
+        "Creates a new factura. The request is **multipart/form-data** to accept an optional "
+        "scanned document (`file`) alongside the structured fiscal fields.\n\n"
+        "Fields:\n\n"
+        "* `type` — `received` or `issued`.\n"
+        "* `number` / `ruc` / `supplier_name` — fiscal identifiers.\n"
+        "* `date` — issue date (ISO YYYY-MM-DD).\n"
+        "* `total` — grand total as decimal string.\n"
+        "* `iva_5`, `iva_10`, `exempt` — IVA buckets (Paraguay), defaulting to `0`.\n"
+        "* `currency_code` — defaults to `PYG`.\n"
+        "* `file` — optional PDF/image (max " + str(MAX_FILE_SIZE) + " bytes).\n\n"
+        "**Authorization**: caller must have `role == admin` or `role == member`.\n\n"
+        "The attached file is persisted under `UPLOAD_DIR` and can later be retrieved via "
+        "`GET /facturas/{id}/download`."
+    ),
+    responses={
+        201: {"description": "Factura created."},
+        400: {"description": "Invalid date or decimal in a form field."},
+        401: {"description": "Missing or invalid access token."},
+        403: {"description": "Caller has insufficient role."},
+        413: {"description": "Uploaded file exceeds the configured size limit."},
+        422: {"description": "Validation error (unknown type, malformed RUC, ...)."},
+    },
 )
 def create_factura(
     db: Annotated[Session, Depends(get_db)],
@@ -141,7 +199,27 @@ def create_factura(
     return factura_service._to_out(factura)
 
 
-@router.get("/export")
+@router.get(
+    "/export",
+    summary="Export a month of facturas as a ZIP (CSV + attached files)",
+    description=(
+        "Bundles all facturas falling inside the supplied calendar month into a single ZIP "
+        "stream containing:\n\n"
+        "1. `facturas-YYYY-MM.csv` — one row per factura with all fiscal columns.\n"
+        "2. `arquivos/factura-<number>-<ruc>.<ext>` — the original attachment for each "
+        "factura that has one. Slashes in number/RUC are sanitized to underscores.\n\n"
+        "Use this endpoint to drive monthly tax submissions (e.g. SET in Paraguay).\n\n"
+        "**Filter**: `type` may be `received`, `issued` or `all` (default `all`)."
+    ),
+    responses={
+        200: {
+            "description": "ZIP archive streamed.",
+            "content": {"application/zip": {}},
+        },
+        400: {"description": "Invalid `month` (must be `YYYY-MM`) or unsupported `type`."},
+        401: {"description": "Missing or invalid access token."},
+    },
+)
 def export_facturas(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
@@ -235,7 +313,16 @@ def export_facturas(
     )
 
 
-@router.get("/{factura_id}", response_model=FacturaOut)
+@router.get(
+    "/{factura_id}",
+    response_model=FacturaOut,
+    summary="Get a single factura by id",
+    responses={
+        401: {"description": "Missing or invalid access token."},
+        403: {"description": "Caller has no visibility on this factura."},
+        404: {"description": "Factura not found."},
+    },
+)
 def get_factura(
     factura_id: int,
     db: Annotated[Session, Depends(get_db)],
@@ -245,7 +332,26 @@ def get_factura(
     return factura_service._to_out(factura)
 
 
-@router.get("/{factura_id}/download")
+@router.get(
+    "/{factura_id}/download",
+    summary="Download the original file attached to a factura",
+    description=(
+        "Streams the binary file (typically PDF or image) that was uploaded when the factura "
+        "was created or updated. The response carries the original `Content-Type` (`file_mime`) "
+        "and a filename derived from the factura number.\n\n"
+        "Returns 404 if the factura has no `file_path`, or if the underlying file is missing "
+        "on disk."
+    ),
+    responses={
+        200: {
+            "description": "Binary stream of the original attachment.",
+            "content": {"application/octet-stream": {}, "application/pdf": {}, "image/*": {}},
+        },
+        401: {"description": "Missing or invalid access token."},
+        403: {"description": "Caller has no visibility on this factura."},
+        404: {"description": "Factura not found or has no attached file."},
+    },
+)
 def download_factura(
     factura_id: int,
     db: Annotated[Session, Depends(get_db)],
@@ -274,6 +380,21 @@ def download_factura(
     "/{factura_id}",
     response_model=FacturaOut,
     dependencies=[Depends(require_member_or_admin)],
+    summary="Update fiscal fields and/or replace the attached file",
+    description=(
+        "Partial update via **multipart/form-data**. Any form field left out is preserved as-is. "
+        "If `file` is supplied, the new upload replaces the previous attachment on disk; "
+        "otherwise the existing file is kept.\n\n"
+        "**Authorization**: caller must have `role == admin` or `role == member`."
+    ),
+    responses={
+        400: {"description": "Invalid date or decimal in a form field."},
+        401: {"description": "Missing or invalid access token."},
+        403: {"description": "Caller has insufficient role or no visibility on the factura."},
+        404: {"description": "Factura not found."},
+        413: {"description": "Uploaded file exceeds the configured size limit."},
+        422: {"description": "Validation error."},
+    },
 )
 def update_factura(
     factura_id: int,
@@ -328,6 +449,17 @@ def update_factura(
     "/{factura_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_member_or_admin)],
+    summary="Delete a factura (and its attachment)",
+    description=(
+        "Permanently removes a factura record and the on-disk file it points to (if any).\n\n"
+        "**Authorization**: caller must have `role == admin` or `role == member`."
+    ),
+    responses={
+        204: {"description": "Factura and any attached file removed."},
+        401: {"description": "Missing or invalid access token."},
+        403: {"description": "Caller has insufficient role or no visibility on the factura."},
+        404: {"description": "Factura not found."},
+    },
 )
 def delete_factura(
     factura_id: int,

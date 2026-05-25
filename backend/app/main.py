@@ -41,8 +41,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         scheduler.shutdown(wait=False)
 
 
-_is_prod = settings.ENV == "prod"
-
 API_DESCRIPTION = """
 # Finances API
 
@@ -129,9 +127,9 @@ app = FastAPI(
     version="0.1.0",
     summary="Multi-currency personal finance backend (accounts, cards, payables, reports).",
     description=API_DESCRIPTION,
-    openapi_url="/api/openapi.json" if not _is_prod else None,
-    docs_url="/api/docs" if not _is_prod else None,
-    redoc_url="/api/redoc" if not _is_prod else None,
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
     openapi_tags=OPENAPI_TAGS,
     contact={"name": "Caio Norder", "email": "caio@joinads.me"},
     license_info={"name": "Proprietary — all rights reserved"},
