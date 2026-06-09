@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Invoice {{ number }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 22mm 16mm;
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: "DejaVu Sans", sans-serif;
+      font-size: 8pt;
+      color: #777;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "DejaVu Sans", "Helvetica Neue", Arial, sans-serif;
+    font-size: 9.5pt;
+    line-height: 1.4;
+    color: #1a1a1a;
+    margin: 0;
+  }
+
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+
+  .muted { color: #666; }
+  .small { font-size: 8pt; }
+  .right { text-align: right; }
+  .bold { font-weight: 700; }
+  .nowrap { white-space: nowrap; }
+
+  /* ── ① Issuer header + ② INVOICE meta ────────────────────────── */
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 10px;
+  }
+  .issuer .legal-name { font-size: 15pt; font-weight: 700; }
+  .issuer .line { font-size: 9pt; }
+
+  .meta { text-align: right; min-width: 46%; }
+  .meta .doc-title {
+    font-size: 20pt;
+    letter-spacing: 2px;
+    color: #1a1a1a;
+  }
+  .meta .number {
+    font-size: 12pt;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .meta table { margin-left: auto; margin-top: 8px; border-collapse: collapse; }
+  .meta td { padding: 1px 0 1px 14px; font-size: 9pt; }
+  .meta td.label { color: #666; text-align: right; }
+  .meta td.value { font-weight: 600; text-align: right; }
+
+  /* ── ③ Bill-To ───────────────────────────────────────────────── */
+  .bill-to {
+    margin-top: 16px;
+    padding: 10px 12px;
+    background: #f6f7f9;
+    border-radius: 4px;
+    width: 58%;
+  }
+  .section-label {
+    font-size: 7.5pt;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #888;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .bill-to .name { font-weight: 700; font-size: 10.5pt; }
+
+  /* ── ④ Line item table ───────────────────────────────────────── */
+  table.items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+  }
+  table.items thead { display: table-header-group; }
+  table.items th {
+    text-align: left;
+    font-size: 7.5pt;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #fff;
+    background: #1a1a1a;
+    padding: 6px 8px;
+  }
+  table.items th.num, table.items td.num { text-align: right; white-space: nowrap; }
+  table.items td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #e3e3e3;
+    vertical-align: top;
+  }
+  table.items tbody tr:nth-child(even) td { background: #fafafa; }
+
+  /* ── ⑤ Totals box ────────────────────────────────────────────── */
+  .totals-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
+  table.totals { border-collapse: collapse; min-width: 46%; }
+  table.totals td { padding: 4px 10px; }
+  table.totals td.label { text-align: right; color: #555; }
+  table.totals td.value { text-align: right; font-weight: 600; white-space: nowrap; }
+  table.totals tr.grand td {
+    border-top: 2px solid #1a1a1a;
+    font-size: 12pt;
+    font-weight: 700;
+    padding-top: 7px;
+    color: #1a1a1a;
+  }
+
+  /* ── ⑥ Wire instructions panel ───────────────────────────────── */
+  .wire {
+    margin-top: 22px;
+    border: 1.5px solid #1a1a1a;
+    border-radius: 5px;
+    padding: 0;
+    page-break-inside: avoid;
+  }
+  .wire-head {
+    background: #1a1a1a;
+    color: #fff;
+    padding: 7px 12px;
+    font-size: 9.5pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .wire-body { padding: 12px; }
+  .wire-grp { margin-bottom: 10px; }
+  .wire-grp:last-child { margin-bottom: 0; }
+  .wire-grp .grp-label {
+    font-size: 7.5pt;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #888;
+    font-weight: 700;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 2px;
+    margin-bottom: 4px;
+  }
+  table.wire-kv { width: 100%; border-collapse: collapse; }
+  table.wire-kv td { padding: 2px 0; vertical-align: top; font-size: 9pt; }
+  table.wire-kv td.k { width: 38%; color: #555; }
+  table.wire-kv td.v { font-weight: 600; }
+  .pay-ref {
+    margin-top: 8px;
+    padding: 7px 10px;
+    background: #fff4d6;
+    border: 1px solid #e3c25a;
+    border-radius: 4px;
+    font-size: 10pt;
+  }
+  .pay-ref .ref-value { font-weight: 700; font-size: 11pt; }
+  .wire-disclaimer {
+    margin-top: 8px;
+    font-size: 8pt;
+    color: #555;
+    font-style: italic;
+  }
+
+  /* ── ⑦ Footer notes / terms / W-8BEN footnote ────────────────── */
+  .footer { margin-top: 20px; }
+  .footer .block { margin-bottom: 10px; }
+  .footnote {
+    margin-top: 14px;
+    padding-top: 8px;
+    border-top: 1px solid #ddd;
+    font-size: 8pt;
+    color: #666;
+  }
+</style>
+</head>
+<body>
+
+  {# ─────────── ① Issuer header  +  ② INVOICE meta ─────────── #}
+  <div class="top">
+    <div class="issuer">
+      <div class="legal-name">{{ issuer.legal_name }}</div>
+      <div class="line">RUC: {{ issuer.ruc }}</div>
+      <div class="line">{{ issuer.address_line1 }}</div>
+      {% if issuer.address_line2 %}<div class="line">{{ issuer.address_line2 }}</div>{% endif %}
+      <div class="line">{{ issuer.city }}{% if issuer.country %}, {{ issuer.country }}{% endif %}</div>
+      {% if issuer.email %}<div class="line muted">{{ issuer.email }}</div>{% endif %}
+      {% if issuer.phone %}<div class="line muted">{{ issuer.phone }}</div>{% endif %}
+    </div>
+
+    <div class="meta">
+      <div class="doc-title">INVOICE</div>
+      <div class="number">{{ number }}</div>
+      <table>
+        <tr><td class="label">Issue date</td><td class="value">{{ issue_date }}</td></tr>
+        <tr><td class="label">Due date</td><td class="value">{{ due_date }}</td></tr>
+        <tr><td class="label">Terms</td><td class="value">{{ terms_label }}</td></tr>
+        {% if po_number %}<tr><td class="label">PO number</td><td class="value">{{ po_number }}</td></tr>{% endif %}
+        {% if contract %}
+          {% if contract.reference %}<tr><td class="label">Contract</td><td class="value">{{ contract.reference }}</td></tr>{% endif %}
+          {% if service_period %}<tr><td class="label">Service period</td><td class="value">{{ service_period }}</td></tr>{% endif %}
+        {% elif service_period %}
+          <tr><td class="label">Service period</td><td class="value">{{ service_period }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {# ─────────── ③ Bill-To (customer snapshot) ─────────── #}
+  <div class="bill-to">
+    <div class="section-label">Bill To</div>
+    <div class="name">{{ customer.legal_name }}</div>
+    {% if customer.contact_person %}<div>Attn: {{ customer.contact_person }}</div>{% endif %}
+    <div>{{ customer.billing_address_line1 }}</div>
+    {% if customer.billing_address_line2 %}<div>{{ customer.billing_address_line2 }}</div>{% endif %}
+    <div>
+      {{ customer.billing_city }}{% if customer.billing_state %}, {{ customer.billing_state }}{% endif %}{% if customer.billing_postal_code %} {{ customer.billing_postal_code }}{% endif %}
+    </div>
+    <div>{{ customer.billing_country }}</div>
+    {% if customer.tax_id %}<div class="small muted">EIN: {{ customer.tax_id }}</div>{% endif %}
+    {% if customer.email %}<div class="small muted">{{ customer.email }}</div>{% endif %}
+    {% if customer.phone %}<div class="small muted">{{ customer.phone }}</div>{% endif %}
+  </div>
+
+  {% if contract and contract.scope_description %}
+  <div class="bill-to" style="background:transparent;padding-left:0;width:100%;">
+    <div class="section-label">Scope</div>
+    <div>{{ contract.scope_description }}</div>
+  </div>
+  {% endif %}
+
+  {# ─────────── ④ Line items (paginating) ─────────── #}
+  <table class="items">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="num">Qty</th>
+        <th class="num">Unit price</th>
+        <th class="num">Tax</th>
+        <th class="num">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in line_items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td class="num">{{ item.quantity }}</td>
+        <td class="num">{{ item.unit_price }}</td>
+        <td class="num">{{ item.tax_label }}</td>
+        <td class="num">{{ item.line_total }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {# ─────────── ⑤ Totals box ─────────── #}
+  <div class="totals-wrap">
+    <table class="totals">
+      <tr>
+        <td class="label">Subtotal</td>
+        <td class="value">{{ totals.subtotal }}</td>
+      </tr>
+      {% if totals.has_discount %}
+      <tr>
+        <td class="label">Discount</td>
+        <td class="value">-{{ totals.discount_total }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td class="label">Tax</td>
+        <td class="value">{{ totals.tax_total }}</td>
+      </tr>
+      <tr class="grand">
+        <td class="label">TOTAL USD</td>
+        <td class="value">{{ totals.total }}</td>
+      </tr>
+    </table>
+  </div>
+
+  {# ─────────── ⑥ International wire instructions ─────────── #}
+  <div class="wire">
+    <div class="wire-head">INTERNATIONAL WIRE INSTRUCTIONS</div>
+    <div class="wire-body">
+
+      <div class="wire-grp">
+        <div class="grp-label">Beneficiary</div>
+        <table class="wire-kv">
+          <tr><td class="k">Beneficiary name</td><td class="v">{{ issuer.legal_name }}</td></tr>
+          <tr><td class="k">RUC</td><td class="v">{{ issuer.ruc }}</td></tr>
+          <tr><td class="k">Address</td><td class="v">
+            {{ issuer.address_line1 }}{% if issuer.address_line2 %}, {{ issuer.address_line2 }}{% endif %}, {{ issuer.city }}, {{ issuer.country }}
+          </td></tr>
+          {% if issuer.account_number %}<tr><td class="k">Account</td><td class="v">{{ issuer.account_number }}</td></tr>{% endif %}
+          {% if issuer.iban %}<tr><td class="k">IBAN</td><td class="v">{{ issuer.iban }}</td></tr>{% endif %}
+        </table>
+      </div>
+
+      <div class="wire-grp">
+        <div class="grp-label">Beneficiary bank</div>
+        <table class="wire-kv">
+          <tr><td class="k">Bank</td><td class="v">{{ issuer.bank_name }}</td></tr>
+          {% if issuer.bank_address %}<tr><td class="k">Bank address</td><td class="v">{{ issuer.bank_address }}</td></tr>{% endif %}
+          <tr><td class="k">Country</td><td class="v">{{ issuer.bank_country }}</td></tr>
+          <tr><td class="k">SWIFT / BIC</td><td class="v">{{ issuer.swift_bic }}</td></tr>
+        </table>
+      </div>
+
+      {% if intermediary %}
+      <div class="wire-grp">
+        <div class="grp-label">Intermediary / correspondent bank (US)</div>
+        <table class="wire-kv">
+          <tr><td class="k">Bank</td><td class="v">{{ intermediary.bank_name }}</td></tr>
+          <tr><td class="k">SWIFT / BIC</td><td class="v">{{ intermediary.swift_bic }}</td></tr>
+          {% if intermediary.account_number %}<tr><td class="k">Account at correspondent</td><td class="v">{{ intermediary.account_number }}</td></tr>{% endif %}
+          <tr><td class="k">Country</td><td class="v">{{ intermediary.bank_country }}</td></tr>
+        </table>
+      </div>
+      {% endif %}
+
+      <div class="pay-ref">
+        Payment Reference: <span class="ref-value">{{ number }}</span><br />
+        Currency: <span class="bold">USD</span>
+      </div>
+
+      {% if issuer.wire_reference_instructions %}
+      <div class="wire-disclaimer">{{ issuer.wire_reference_instructions }}</div>
+      {% endif %}
+
+      <div class="wire-disclaimer">
+        The total billed ({{ totals.total }}) is the amount to remit. Any bank or
+        correspondent transfer fees are borne by the beneficiary.
+      </div>
+
+    </div>
+  </div>
+
+  {# ─────────── ⑦ Footer notes / terms / W-8BEN footnote ─────────── #}
+  <div class="footer">
+    {% if notes %}
+    <div class="block">
+      <div class="section-label">Notes</div>
+      <div>{{ notes }}</div>
+    </div>
+    {% endif %}
+    {% if terms_text %}
+    <div class="block">
+      <div class="section-label">Terms</div>
+      <div>{{ terms_text }}</div>
+    </div>
+    {% endif %}
+
+    {% if tax_status_note %}
+    <div class="footnote">{{ tax_status_note }}</div>
+    {% endif %}
+  </div>
+
+</body>
+</html>

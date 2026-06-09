@@ -17,6 +17,10 @@ import { PayablesPage } from './features/payables/PayablesPage'
 import { ReceivablesPage } from './features/receivables/ReceivablesPage'
 import { RecurrencesPage } from './features/recurrences/RecurrencesPage'
 import { FacturasPage } from './features/facturas/FacturasPage'
+import { InvoicesPage } from './features/invoices/InvoicesPage'
+import { InvoiceEditor } from './features/invoices/InvoiceEditor'
+import { InvoiceDetailPage } from './features/invoices/InvoiceDetailPage'
+import { CustomersPage } from './features/customers/CustomersPage'
 import { ReportsPage } from './features/reports/ReportsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import Root from './routes/root'
@@ -52,6 +56,11 @@ const router = createBrowserRouter([
               { path: 'receivables', element: <ReceivablesPage /> },
               { path: 'recurrences', element: <RecurrencesPage /> },
               { path: 'facturas', element: <FacturasPage /> },
+              { path: 'invoices', element: <InvoicesPage /> },
+              { path: 'invoices/new', element: <InvoiceEditor /> },
+              { path: 'invoices/:id', element: <InvoiceDetailPage /> },
+              { path: 'invoices/:id/edit', element: <InvoiceEditor /> },
+              { path: 'customers', element: <CustomersPage /> },
               { path: 'reports', element: <ReportsPage /> },
               { path: 'users', element: <UsersPage /> },
               { path: 'settings', element: <SettingsPage /> },

@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 
 from app.models import AuditLog
 
-
 SENSITIVE_KEYS = {
     "password",
     "password_hash",
@@ -14,6 +13,13 @@ SENSITIVE_KEYS = {
     "access_token",
     "refresh_token",
     "file",
+    # Wire/banking + tax identifiers (commercial invoices — plan H3).
+    "iban",
+    "account_number",
+    "swift_bic",
+    "intermediary_account_number",
+    "ein",
+    "tax_id",
 }
 
 

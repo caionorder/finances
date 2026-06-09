@@ -6,6 +6,7 @@ import {
   Mail,
   Monitor,
   Moon,
+  Receipt,
   Settings,
   Shield,
   ShieldOff,
@@ -19,6 +20,7 @@ import { useTheme } from '@/components/theme/ThemeProvider'
 import { ApiKeysSection } from './ApiKeysSection'
 import { AuditLogsSection } from './AuditLogsSection'
 import { FxRatesSection } from './FxRatesSection'
+import { IssuerSection } from './IssuerSection'
 import { cn } from '@/lib/utils'
 
 const ROLE_LABEL: Record<'admin' | 'member' | 'viewer', string> = {
@@ -292,6 +294,15 @@ export function SettingsPage() {
               Auditoria
             </TabsTrigger>
           ) : null}
+          {isAdmin ? (
+            <TabsTrigger
+              value="issuer"
+              className="gap-1.5 px-2 pb-3 data-active:text-primary after:bg-primary after:bottom-[-1px]"
+            >
+              <Receipt className="h-3.5 w-3.5" />
+              Emissor
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger
             value="fx"
             className="gap-1.5 px-2 pb-3 data-active:text-primary after:bg-primary after:bottom-[-1px]"
@@ -318,6 +329,10 @@ export function SettingsPage() {
 
         <TabsContent value="audit" className="mt-4">
           {isAdmin ? <AuditLogsSection /> : <AdminOnlyNotice />}
+        </TabsContent>
+
+        <TabsContent value="issuer" className="mt-4">
+          {isAdmin ? <IssuerSection /> : <AdminOnlyNotice />}
         </TabsContent>
 
         <TabsContent value="fx" className="mt-4">

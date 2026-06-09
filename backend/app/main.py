@@ -13,13 +13,17 @@ from app.api import (
     audit_logs,
     auth,
     categories,
+    contracts,
     credit_card_purchases,
     credit_cards,
+    customers,
     external,
     facturas,
     fx,
     health,
     investments,
+    invoices,
+    issuer_settings,
     payables,
     receivables,
     recurrences,
@@ -110,6 +114,10 @@ OPENAPI_TAGS: list[dict[str, str]] = [
     {"name": "credit-cards", "description": "Credit/debit cards, ACLs and billing cycles."},
     {"name": "credit-card-purchases", "description": "Purchases booked against a credit card — installments supported."},
     {"name": "facturas", "description": "Received/issued invoices (Paraguay-style facturas)."},
+    {"name": "customers", "description": "Reusable US billing customers for commercial invoices."},
+    {"name": "contracts", "description": "Agreements linking a customer to billing terms."},
+    {"name": "invoices", "description": "Commercial USD invoices: draft, issue, PDF, void."},
+    {"name": "issuer-settings", "description": "Singleton issuer profile + wire config (admin)."},
     {"name": "payables", "description": "Bills to pay. Supports partial payments and recurrence."},
     {"name": "receivables", "description": "Money expected to be received. Tracks status and partial collections."},
     {"name": "recurrences", "description": "Recurring payable/receivable templates that auto-generate instances."},
@@ -166,6 +174,10 @@ app.include_router(credit_cards.router, prefix="/api")
 app.include_router(credit_card_purchases.card_router, prefix="/api")
 app.include_router(credit_card_purchases.purchase_router, prefix="/api")
 app.include_router(facturas.router, prefix="/api")
+app.include_router(customers.router, prefix="/api")
+app.include_router(contracts.router, prefix="/api")
+app.include_router(issuer_settings.router, prefix="/api")
+app.include_router(invoices.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(payables.router, prefix="/api")
 app.include_router(receivables.router, prefix="/api")

@@ -92,3 +92,11 @@ class Liquidity(str, enum.Enum):
 class CardType(str, enum.Enum):
     credit = "credit"
     debit = "debit"
+
+
+class InvoiceStatus(str, enum.Enum):
+    draft = "draft"
+    issued = "issued"
+    sent = "sent"
+    paid = "paid"
+    void = "void"

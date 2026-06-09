@@ -2,10 +2,12 @@ import { NavLink } from 'react-router-dom'
 import {
   ArrowLeftRight,
   BarChart3,
+  Building2,
   CreditCard,
   FileText,
   LayoutDashboard,
   LineChart,
+  Receipt,
   Repeat,
   Settings,
   Tags,
@@ -51,6 +53,8 @@ const sections: NavSection[] = [
       { to: '/payables', label: 'Pagar', icon: TrendingDown },
       { to: '/receivables', label: 'Receber', icon: TrendingUp },
       { to: '/recurrences', label: 'Recorrências', icon: Repeat },
+      { to: '/invoices', label: 'Invoices', icon: Receipt },
+      { to: '/customers', label: 'Clientes', icon: Building2 },
     ],
   },
   {
