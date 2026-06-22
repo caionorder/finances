@@ -743,11 +743,20 @@ def _issue_once(
 def _try_render_pdf(db: Session, invoice_id: int) -> None:
     """Best-effort PDF render (post-commit). On ANY failure leave pdf_path=NULL —
     the invoice is already issued/committed, so a render error must never fail
-    the issue or 500 (plan §4 graceful-degrade seam; C2)."""
+    the issue or 500 (plan §4 graceful-degrade seam; C2).
+
+    ``render_and_persist`` only ``flush()``es the pdf_path/sha/timestamp; this
+    runs AFTER the durable issue commit and starts a fresh transaction, so it
+    MUST own the commit. Without it the flushed pdf_path is rolled back when the
+    request-scoped session closes (``get_db`` never commits) — the PDF file ends
+    up on disk but pdf_path stays NULL, hiding the download button. Bug surfaced
+    once the uploads-dir permission error (which used to abort the render before
+    any disk write) was fixed."""
     try:
         from app.services import invoice_pdf_service
 
         invoice_pdf_service.render_and_persist(db, invoice_id)
+        db.commit()
     except Exception:  # noqa: BLE001 — PDF is non-critical; never fail the issue.
         # Discard any partial work from the failed render; the issued invoice
         # is already durable from the prior commit.
